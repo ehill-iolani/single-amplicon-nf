@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema",
+  "$id": "https://raw.githubusercontent.com/ehill-iolani/single-amplicon-nf/main/nextflow_schema.json",
+  "title": "single-amplicon-nf pipeline parameters",
+  "description": "ONT single-amplicon pipeline: one barcode gene per sample -> one polished consensus sequence per sample, with QC.",
+  "type": "object",
+  "$defs": {
+    "input_output_options": {
+      "title": "Input/output options",
+      "type": "object",
+      "description": "Define where the pipeline should find input data and save output data.",
+      "required": [
+        "input"
+      ],
+      "properties": {
+        "input": {
+          "type": "string",
+          "format": "file-path",
+          "exists": true,
+          "mimetype": "text/csv",
+          "pattern": "^\\S+\\.csv$",
+          "description": "Samplesheet CSV with two columns: sample,fastq.",
+          "help_text": "Each row maps a sample name to a fastq file or glob (e.g. `data/barcode17/*.fastq.gz`). A glob may match multiple part-files -- they're merged into one file per sample before filtering. Each sample should hold ONE amplicon (one barcode gene). Glob paths resolve relative to the launch directory, not the samplesheet's own location."
+        },
+        "outdir": {
+          "type": "string",
+          "format": "directory-path",
+          "default": "results",
+          "description": "Output directory where results are published."
+        }
+      }
+    },
+    "primer_trimming": {
+      "title": "Primer trimming",
+      "type": "object",
+      "description": "cutadapt primer trimming -- skipped unless both primers are set.",
+      "properties": {
+        "fwd_primer": {
+          "type": "string",
+          "pattern": "^[ACGTUWSMKRYBDHVNacgtuwsmkrybdhvn]+$",
+          "description": "Forward primer sequence, 5'->3' as ordered.",
+          "help_text": "IUPAC nucleotide codes only. Case-insensitive. Reads are searched in both orientations and flipped to the forward-primer orientation; reads where the primers are not found are discarded."
+        },
+        "rev_primer": {
+          "type": "string",
+          "pattern": "^[ACGTUWSMKRYBDHVNacgtuwsmkrybdhvn]+$",
+          "description": "Reverse primer sequence, 5'->3' as ordered (not reverse-complemented).",
+          "help_text": "IUPAC nucleotide codes only. Case-insensitive. Give it exactly as it appears on the order sheet; the pipeline reverse-complements it itself."
+        }
+      }
+    },
+    "read_filtering": {
+      "title": "Read filtering",
+      "type": "object",
+      "description": "chopper length/quality filtering thresholds.",
+      "properties": {
+        "min_len": {
+          "type": "integer",
+          "default": 300,
+          "minimum": 1,
+          "description": "Minimum read length.",
+          "help_text": "A barcode gene has no universal length, so set this for your amplicon -- a little under its expected length. Run with -entry READ_QC_ONLY first to see your read-length distribution."
+        },
+        "max_len": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum read length. Leave empty for no upper cap.",
+          "help_text": "Set a little over the expected amplicon length to drop concatemers and chimeric reads. Must be greater than min_len."
+        },
+        "min_qual": {
+          "type": "integer",
+          "default": 10,
+          "minimum": 0,
+          "description": "Minimum average read quality (Phred score)."
+        },
+        "enable_read_stats": {
+          "type": "boolean",
+          "default": true,
+          "description": "Summarize read length and Q-score before vs. after filtering.",
+          "help_text": "Writes read_qc_summary.html, read_stats.tsv and read_length_qscore_hist.tsv to final_report/. Purely informational -- nothing downstream depends on it."
+        }
+      }
+    },
+    "read_selection": {
+      "title": "Read selection",
+      "type": "object",
+      "description": "How many reads feed the consensus, and the purity check on them.",
+      "properties": {
+        "downsample_reads": {
+          "type": "integer",
+          "default": 1500,
+          "minimum": 0,
+          "description": "Randomly downsample each sample to this many reads for the consensus. 0 = use all reads.",
+          "help_text": "A consensus of a single amplicon stops improving long before thousands of reads. Sampling is random with a fixed seed, so a rerun gives the same consensus."
+        },
+        "seed": {
+          "type": "integer",
+          "default": 42,
+          "description": "Random seed for downsampling.",
+          "hidden": true
+        },
+        "min_reads": {
+          "type": "integer",
+          "default": 40,
+          "minimum": 1,
+          "description": "Samples with fewer reads than this (after filtering and trimming) are not assembled.",
+          "help_text": "Such a sample is still listed in the summary, as FAIL / too_few_reads -- it does not stop the other samples."
+        },
+        "enable_purity_check": {
+          "type": "boolean",
+          "default": true,
+          "description": "Build the consensus from the dominant read cluster only, and report how dominant it is.",
+          "help_text": "Clusters the reads (vsearch) and keeps the largest cluster, so a contaminated or mixed barcode yields its majority sequence instead of a blend. The share of reads in that cluster is reported as dominant_fraction; below min_dominant_frac the sample is flagged WARN. Catches unrelated/off-target contamination, not closely related variants."
+        },
+        "cluster_id": {
+          "type": "number",
+          "default": 0.7,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "vsearch identity threshold for the purity check.",
+          "help_text": "Deliberately loose: it only has to tolerate raw ONT error between two reads of the same sequence. Too high (about 0.8 and over, with older/noisier basecalls) splits a clean sample into several clusters and makes it look mixed. Lower if clean samples report a low dominant_fraction."
+        }
+      }
+    },
+    "consensus_polishing": {
+      "title": "Consensus polishing",
+      "type": "object",
+      "description": "spoa draft, racon polish, and optionally medaka.",
+      "properties": {
+        "enable_medaka": {
+          "type": "boolean",
+          "default": true,
+          "description": "Polish the consensus with medaka (slower, more accurate).",
+          "help_text": "When off, the racon consensus is the final consensus."
+        },
+        "medaka_model": {
+          "type": "string",
+          "default": "r1041_e82_400bps_hac_v5.0.0",
+          "description": "Medaka model.",
+          "help_text": "Must match the pore, chemistry and basecaller model that produced the reads, or the polish can make the consensus worse."
+        }
+      }
+    },
+    "qc_thresholds": {
+      "title": "QC thresholds",
+      "type": "object",
+      "description": "When a sample is flagged WARN or FAIL in the summary.",
+      "properties": {
+        "min_depth": {
+          "type": "number",
+          "default": 30,
+          "minimum": 0,
+          "description": "Minimum mean read depth over the consensus (reads mapped back to it). Below this is FAIL.",
+          "help_text": "The same 30X default as wf-amplicon. Positions covered below this are reported as uneven coverage (WARN)."
+        },
+        "min_primary_frac": {
+          "type": "number",
+          "default": 0.7,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Minimum fraction of the sample's reads that must map to the consensus. Below this is FAIL.",
+          "help_text": "Reads that don't map are contamination or off-target product."
+        },
+        "min_dominant_frac": {
+          "type": "number",
+          "default": 0.8,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Minimum share of reads in the dominant cluster. Below this is WARN (mixed_reads).",
+          "help_text": "Only applies when the purity check is on."
+        }
+      }
+    },
+    "container_images": {
+      "title": "Container images",
+      "type": "object",
+      "description": "Where each tool's container image is pulled from.",
+      "properties": {
+        "container_registry": {
+          "type": "string",
+          "default": "quay.io",
+          "description": "Registry for the biocontainers images.",
+          "help_text": "The google_batch profile points this at the project's own Artifact Registry mirror (see scripts/mirror_images.sh); pass --container_registry quay.io to pull from upstream instead. The mirror keeps each image's upstream path, so only the host changes."
+        },
+        "dockerhub_registry": {
+          "type": "string",
+          "default": "docker.io",
+          "description": "Registry for the Docker Hub images (medaka, and ubuntu on Batch).",
+          "help_text": "Same idea as container_registry, for images that come from Docker Hub."
+        }
+      }
+    },
+    "generic_options": {
+      "title": "Generic options",
+      "type": "object",
+      "description": "Less common options, typically left at their defaults.",
+      "properties": {
+        "help": {
+          "type": "boolean",
+          "default": false,
+          "description": "Display the help message and exit.",
+          "hidden": true
+        },
+        "tracedir": {
+          "type": "string",
+          "format": "directory-path",
+          "default": "results/pipeline_info",
+          "description": "Directory for the Nextflow timeline/report/trace files.",
+          "hidden": true
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "$ref": "#/$defs/input_output_options"
+    },
+    {
+      "$ref": "#/$defs/primer_trimming"
+    },
+    {
+      "$ref": "#/$defs/read_filtering"
+    },
+    {
+      "$ref": "#/$defs/read_selection"
+    },
+    {
+      "$ref": "#/$defs/consensus_polishing"
+    },
+    {
+      "$ref": "#/$defs/qc_thresholds"
+    },
+    {
+      "$ref": "#/$defs/container_images"
+    },
+    {
+      "$ref": "#/$defs/generic_options"
+    }
+  ]
+}

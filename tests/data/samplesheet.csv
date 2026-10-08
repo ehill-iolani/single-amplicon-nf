@@ -1,0 +1,5 @@
+sample,fastq
+sample_a,tests/data/reads/sample_a/*.fastq.gz
+sample_b,tests/data/reads/sample_b/*.fastq.gz
+sample_c,tests/data/reads/sample_c/*.fastq.gz
+sample_d,tests/data/reads/sample_d/*.fastq.gz
