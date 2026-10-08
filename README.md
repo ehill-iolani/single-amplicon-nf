@@ -98,12 +98,3 @@ nextflow run main.nf -profile test,docker
 Four synthetic samples, one per outcome: clean, clean, 75/25 mix (WARN, consensus
 is the majority sequence), and too few reads (FAIL). Medaka is off in this profile.
 
-## Platform integration (not done yet)
-
-- Backend: add a `tools.yaml` entry (`repo`, tagged `pinned_version`, `schema_path`,
-  `example_params`, `exclude_stages`), and upload the example data to GCS.
-- Frontend: a results component (the existing amplicon one is tied to
-  `abundance_table.tsv`), nodes in `pipelineGraph.js` matching the process names
-  above, citations, and an e2e fixture.
-- Run `scripts/mirror_images.sh` so the new images (seqkit, medaka digest) are in the
-  Artifact Registry mirror before the first `google_batch` run.
