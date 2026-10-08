@@ -35,14 +35,40 @@ to trim primers (reads are flipped to one orientation).
 
 ## Pipeline
 
-```
-MERGE_FASTQ -> CHOPPER -> READ_STATS (side branch)
-            -> CUTADAPT (optional primers; flips reads to one orientation)
-            -> DOWNSAMPLE (random, seeded)
-            -> DOMINANT_CLUSTER (purity check; keep the largest vsearch cluster)
-            -> SPOA_CONSENSUS -> MINIMAP2_ALIGN -> RACON -> MEDAKA
-            -> MAPBACK -> CONSENSUS_QC          (all usable reads mapped to the consensus)
-            -> BUILD_REPORT
+```mermaid
+flowchart TD
+    reads[/"--input samplesheet.csv"/] -->|"sample,fastq rows"| MERGE_FASTQ --> CHOPPER
+
+    MERGE_FASTQ --> stats_check{"--enable_read_stats?"}
+    CHOPPER --> stats_check
+    stats_check -->|"true (default)"| READ_STATS --> READ_STATS_REPORT --> readqc[["read QC html + tsv"]]
+
+    CHOPPER --> CUTADAPT["CUTADAPT\n(trims primers if both given,\nflips reads to one orientation)"]
+    CUTADAPT --> DOWNSAMPLE["DOWNSAMPLE\n(sorted by id, seeded sample)"]
+
+    DOWNSAMPLE --> min_check{"reads >= --min_reads?"}
+    min_check -->|"no"| nocons["no consensus:\nFAIL, too_few_reads"]
+    min_check -->|"yes"| purity_check{"--enable_purity_check?"}
+
+    purity_check -->|"true (default)"| DOMINANT_CLUSTER["DOMINANT_CLUSTER\n(keep the largest vsearch cluster)"]
+    purity_check -->|"false"| reads_in["reads for consensus"]
+    DOMINANT_CLUSTER --> reads_in
+
+    reads_in --> SPOA_CONSENSUS --> MINIMAP2_ALIGN --> RACON
+    RACON --> medaka_check{"--enable_medaka?"}
+    medaka_check -->|"true (default)"| MEDAKA --> consensus["consensus fasta"]
+    medaka_check -->|"false"| consensus
+
+    consensus --> MAPBACK
+    DOWNSAMPLE -->|"all usable reads"| MAPBACK
+    MAPBACK --> CONSENSUS_QC["CONSENSUS_QC\n(depth, mapped fraction, identity)"]
+
+    CONSENSUS_QC --> BUILD_REPORT
+    DOMINANT_CLUSTER -->|"dominant_fraction"| BUILD_REPORT
+    nocons --> BUILD_REPORT
+    DOWNSAMPLE -->|"read counts"| BUILD_REPORT
+
+    BUILD_REPORT --> report[["final_report/\nconsensus_summary.tsv\nall_consensus.fasta\nrun_qc_summary.html"]]
 ```
 
 A sample with fewer than `--min_reads` reads gets no consensus but is still
