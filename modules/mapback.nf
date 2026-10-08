@@ -7,7 +7,7 @@ process MAPBACK {
     tuple val(sample), path(consensus), path(reads)
 
     output:
-    tuple val(sample), path(consensus), path("${sample}.paf"), env(N_READS), emit: paf
+    tuple val(sample), path(consensus), path("${sample}.paf"), env('N_READS'), emit: paf
 
     script:
     // base-level (-c) PAF so the match count is exact. Per-position depth and

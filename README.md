@@ -12,8 +12,9 @@ The conventions (samplesheet, `google_batch` profile, schema, output layout) are
 shared so it can be registered on the platform.
 
 > **Status: scaffold (v0.1.0-dev).** `-profile test,docker` runs end to end under
-> Nextflow 24.04.4 (also with `--enable_medaka true`) and gives the expected
-> PASS / PASS / WARN / FAIL on the synthetic data. Not yet run on `google_batch`, on
+> Nextflow 24.04.4 and 26.04.6 (also with `--enable_medaka true`), and gives the expected
+> PASS / PASS / WARN / FAIL on the synthetic data, with identical consensus sequences
+> on every run. Not yet run on `google_batch`, on
 > real reads, or with primers (primer trimming was checked on its own).
 
 ## Quickstart
