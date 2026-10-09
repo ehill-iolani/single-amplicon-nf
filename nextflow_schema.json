@@ -119,6 +119,20 @@
           "maximum": 1,
           "description": "vsearch identity threshold for the purity check.",
           "help_text": "Deliberately loose: it only has to tolerate raw ONT error between two reads of the same sequence. Too high (about 0.8 and over, with older/noisier basecalls) splits a clean sample into several clusters and makes it look mixed. Lower if clean samples report a low dominant_fraction."
+        },
+        "enable_secondary_consensus": {
+          "type": "boolean",
+          "default": true,
+          "description": "Also build a consensus from the second-largest read cluster when it is big enough.",
+          "help_text": "For a barcode that holds two real sequences (a mixed or contaminated sample), the main consensus is built from the larger group as before, and the other group gets a consensus of its own, with its own QC, listed in final_report/secondary_consensus.tsv and .fasta. Needs the purity check. Closely related variants fall in one cluster and are not separated."
+        },
+        "min_secondary_frac": {
+          "type": "number",
+          "default": 0.2,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Smallest share of a sample's reads the second cluster needs to get its own consensus.",
+          "help_text": "Also needs at least min_reads reads. A scatter of small clusters (noisy reads) stays below this and is ignored."
         }
       }
     },

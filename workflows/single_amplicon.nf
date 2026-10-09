@@ -49,23 +49,30 @@ workflow SINGLE_AMPLICON {
         }
 
     // 4. purity check: keep only the dominant read cluster (strand-aware, so
-    //    every kept read also shares the centroid's orientation, which spoa needs)
+    //    every kept read also shares the centroid's orientation, which spoa needs).
+    //    When the second-largest cluster is big enough to be a second sequence
+    //    (--min_secondary_frac), its reads come out too, under the id
+    //    "<sample><secondary_suffix>"; they take the same steps below as a sample
+    //    of their own, so the second consensus gets the same polish and QC
     if (params.enable_purity_check) {
         DOMINANT_CLUSTER(usable_ch)
         consensus_reads = DOMINANT_CLUSTER.out.reads
         purity_files    = DOMINANT_CLUSTER.out.purity.map { sample, tsv -> tsv }.collect().ifEmpty([])
+        secondary_reads = DOMINANT_CLUSTER.out.secondary.map { sample, fastq -> tuple("${sample}${params.secondary_suffix}".toString(), fastq) }
     } else {
         consensus_reads = usable_ch
         purity_files    = Channel.value([])
+        secondary_reads = Channel.empty()
     }
+    all_consensus_reads = consensus_reads.mix(secondary_reads)
 
     // 5. consensus: spoa draft -> racon -> (medaka)
-    SPOA_CONSENSUS(consensus_reads)
-    MINIMAP2_ALIGN(consensus_reads.join(SPOA_CONSENSUS.out.draft))
+    SPOA_CONSENSUS(all_consensus_reads)
+    MINIMAP2_ALIGN(all_consensus_reads.join(SPOA_CONSENSUS.out.draft))
     RACON(MINIMAP2_ALIGN.out.aligned)
 
     if (params.enable_medaka) {
-        MEDAKA(consensus_reads.join(RACON.out.polished))
+        MEDAKA(all_consensus_reads.join(RACON.out.polished))
         consensus_ch = MEDAKA.out.consensus
     } else {
         consensus_ch = RACON.out.polished
@@ -73,8 +80,10 @@ workflow SINGLE_AMPLICON {
 
     // 6. QC: map ALL of the sample's usable reads (not just the dominant
     //    cluster) back to the consensus -- reads that don't map are the
-    //    contamination/off-target signal, independent of the clustering
-    MAPBACK(consensus_ch.join(usable_ch))
+    //    contamination/off-target signal, independent of the clustering. A second
+    //    consensus is checked against its own cluster's reads instead: the rest
+    //    of the sample is, by definition, not it
+    MAPBACK(consensus_ch.join(usable_ch.mix(secondary_reads)))
     CONSENSUS_QC(MAPBACK.out.paf)
 
     // 7. one summary row per sample (including samples that got no consensus),

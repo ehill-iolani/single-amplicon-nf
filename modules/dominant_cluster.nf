@@ -10,6 +10,9 @@ process DOMINANT_CLUSTER {
     output:
     tuple val(sample), path("${sample}.dominant.fastq.gz"), emit: reads
     tuple val(sample), path("${sample}.purity.tsv"), emit: purity
+    // only when the second-largest cluster is big enough to build a consensus
+    // from (see below); otherwise nothing is emitted for the sample
+    tuple val(sample), path("${sample}.secondary.fastq.gz"), optional: true, emit: secondary
 
     script:
     /*
@@ -34,6 +37,14 @@ process DOMINANT_CLUSTER {
      * --strand both: reads come off the pore in either orientation. Members that
      * hit the centroid on the minus strand are reverse-complemented (qualities
      * reversed) so the whole cluster shares one orientation.
+     *
+     * Second sequence: when the second-largest cluster holds at least
+     * --min_secondary_frac of the clustered reads (and at least --min_reads
+     * reads, the same floor a sample needs for a consensus at all), its reads
+     * are written out the same way, as <sample>.secondary.fastq.gz, so the
+     * workflow can build a consensus from them too. That is the "two real
+     * sequences in one barcode" case; a scatter of small clusters is noise and
+     * gets nothing. Off with --enable_secondary_consensus false.
      */
     """
     set -o pipefail
@@ -53,24 +64,24 @@ process DOMINANT_CLUSTER {
     # clusters.uc: S = centroid, H = member hit; field 2 = cluster number,
     # field 5 = strand vs. the centroid, field 9 = read id.
     # Dominant cluster = most members; ties go to the lower cluster number so
-    # the choice never depends on awk's hash order.
+    # the choice never depends on awk's hash order. Second = the biggest of the
+    # rest, same tie rule (-1 and 0 reads when there is only one cluster).
     awk -F'\\t' '
         \$1 == "S" || \$1 == "H" { n[\$2]++; total++ }
         END {
-            best = -1; bn = 0; second = 0; k = 0
+            best = -1; bn = 0; next_id = -1; sn = 0; k = 0
             for (c in n) {
                 k++
-                if (n[c] > bn || (n[c] == bn && c + 0 < best + 0)) {
-                    if (bn > second) second = bn
-                    bn = n[c]; best = c
-                } else if (n[c] > second) {
-                    second = n[c]
-                }
+                if (n[c] > bn || (n[c] == bn && c + 0 < best + 0)) { best = c; bn = n[c] }
             }
-            printf "%s\\t%d\\t%d\\t%d\\t%d\\n", best, total, k, bn, second
+            for (c in n) {
+                if (c == best) continue
+                if (n[c] > sn || (n[c] == sn && c + 0 < next_id + 0)) { next_id = c; sn = n[c] }
+            }
+            printf "%s\\t%d\\t%d\\t%d\\t%d\\t%s\\n", best, total, k, bn, sn, next_id
         }
     ' clusters.uc > dominant.txt
-    read dom total k dom_n second_n < dominant.txt
+    read dom total k dom_n second_n second_id < dominant.txt
 
     printf 'sample\\treads_clustered\\tn_clusters\\tdominant_reads\\tdominant_fraction\\tsecond_fraction\\n%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' \\
         "${sample}" "\$total" "\$k" "\$dom_n" \\
@@ -78,29 +89,42 @@ process DOMINANT_CLUSTER {
         "\$(awk -v a=\$second_n -v b=\$total 'BEGIN { printf "%.4f", b ? a / b : 0 }')" \\
         > ${sample}.purity.tsv
 
-    # pull the dominant cluster's reads out of the original fastq (qualities
-    # intact, racon/medaka need them), split by strand for the flip below
-    awk -F'\\t' -v dom=\$dom '
-        NR == FNR { if ((\$1 == "S" || \$1 == "H") && \$2 == dom) st[\$9] = \$5; next }
-        FNR % 4 == 1 { id = substr(\$0, 2) }
-        FNR % 4 == 2 { seq = \$0 }
-        FNR % 4 == 0 {
-            if (id in st) {
-                out = (st[id] == "-") ? "minus.tsv" : "plus.tsv"
-                print id "\\t" seq "\\t" \$0 > out
+    # pull one cluster's reads out of the original fastq (qualities intact,
+    # racon/medaka need them), split by strand for the flip below:
+    #   extract_cluster <cluster number> <output fastq.gz>
+    extract_cluster() {
+        local cluster="\$1" out="\$2"
+        awk -F'\\t' -v dom="\$cluster" '
+            NR == FNR { if ((\$1 == "S" || \$1 == "H") && \$2 == dom) st[\$9] = \$5; next }
+            FNR % 4 == 1 { id = substr(\$0, 2) }
+            FNR % 4 == 2 { seq = \$0 }
+            FNR % 4 == 0 {
+                if (id in st) {
+                    out = (st[id] == "-") ? "minus.tsv" : "plus.tsv"
+                    print id "\\t" seq "\\t" \$0 > out
+                }
             }
-        }
-    ' clusters.uc input.fastq
-    touch plus.tsv minus.tsv
+        ' clusters.uc input.fastq
+        touch plus.tsv minus.tsv
 
-    cut -f1 minus.tsv > minus.id
-    cut -f2 minus.tsv | rev | tr 'ACGTacgt' 'TGCAtgca' > minus.seq
-    cut -f3 minus.tsv | rev > minus.qual
-    paste minus.id minus.seq minus.qual > minus.oriented.tsv
+        cut -f1 minus.tsv > minus.id
+        cut -f2 minus.tsv | rev | tr 'ACGTacgt' 'TGCAtgca' > minus.seq
+        cut -f3 minus.tsv | rev > minus.qual
+        paste minus.id minus.seq minus.qual > minus.oriented.tsv
 
-    cat plus.tsv minus.oriented.tsv \\
-        | awk -F'\\t' '{ printf "@%s\\n%s\\n+\\n%s\\n", \$1, \$2, \$3 }' \\
-        | gzip > ${sample}.dominant.fastq.gz
+        cat plus.tsv minus.oriented.tsv \\
+            | awk -F'\\t' '{ printf "@%s\\n%s\\n+\\n%s\\n", \$1, \$2, \$3 }' \\
+            | gzip > "\$out"
+        rm -f plus.tsv minus.tsv minus.id minus.seq minus.qual minus.oriented.tsv
+    }
+
+    extract_cluster "\$dom" ${sample}.dominant.fastq.gz
+
+    if [ "${params.enable_secondary_consensus}" = "true" ] && awk -v n=\$second_n -v t=\$total -v min_n=${params.min_reads} -v min_f=${params.min_secondary_frac} \\
+            'BEGIN { exit !(t > 0 && n >= min_n && n / t >= min_f) }'; then
+        extract_cluster "\$second_id" ${sample}.secondary.fastq.gz
+        echo "DOMINANT_CLUSTER ${sample}: second cluster has \$second_n of \$total reads; building a second consensus from it" >&2
+    fi
 
     echo "DOMINANT_CLUSTER ${sample}: \$dom_n of \$total reads in the dominant cluster (\$k clusters at --id ${params.cluster_id})" >&2
     """

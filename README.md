@@ -53,6 +53,8 @@ flowchart TD
     purity_check -->|"true (default)"| DOMINANT_CLUSTER["DOMINANT_CLUSTER\n(keep the largest vsearch cluster)"]
     purity_check -->|"false"| reads_in["reads for consensus"]
     DOMINANT_CLUSTER --> reads_in
+    DOMINANT_CLUSTER -->|"2nd cluster big enough (--min_secondary_frac)"| second_reads["second cluster's reads\n(id: sample.secondary)"]
+    second_reads --> reads_in
 
     reads_in --> SPOA_CONSENSUS --> MINIMAP2_ALIGN --> RACON
     RACON --> medaka_check{"--enable_medaka?"}
@@ -61,6 +63,7 @@ flowchart TD
 
     consensus --> MAPBACK
     DOWNSAMPLE -->|"all usable reads"| MAPBACK
+    second_reads -->|"its own reads"| MAPBACK
     MAPBACK --> CONSENSUS_QC["CONSENSUS_QC\n(depth, mapped fraction, identity)"]
 
     CONSENSUS_QC --> BUILD_REPORT
@@ -68,7 +71,7 @@ flowchart TD
     nocons --> BUILD_REPORT
     DOWNSAMPLE -->|"read counts"| BUILD_REPORT
 
-    BUILD_REPORT --> report[["final_report/\nconsensus_summary.tsv\nall_consensus.fasta\nrun_qc_summary.html"]]
+    BUILD_REPORT --> report[["final_report/\nconsensus_summary.tsv\nall_consensus.fasta\nrun_qc_summary.html\n(+ secondary_consensus.* if any)"]]
 ```
 
 A sample with fewer than `--min_reads` reads gets no consensus but is still
@@ -88,20 +91,40 @@ at ~80-88% identity to their centroid. On the synthetic data a clean sample keep
 all its reads in one cluster at 0.75 and below, but splits into three at 0.80.
 Retune for your basecaller and chemistry.
 
+### Two sequences in one barcode
+
+When the second-largest cluster holds at least `--min_secondary_frac` (default
+0.2) of the reads, and at least `--min_reads` of them, it is a second real
+sequence rather than noise, and it gets a consensus too. Its reads go through
+exactly the same steps (spoa, racon, medaka, QC) as a sample of their own, with
+the id `<sample>.secondary`, so a sample name can't end in `.secondary`. The
+sample's own consensus and its row in `consensus_summary.tsv` are unchanged: it is
+still built from the larger group, and `all_consensus.fasta` still has one record
+per sample. The second consensus is checked against its own cluster's reads (the
+rest of the sample is, by definition, not it), so its QC says whether *it* is well
+supported, and its depth, identity and status are its own. `--enable_secondary_consensus false`
+turns this off. Needs the purity check; closely related variants fall in one cluster
+and are not separated.
+
 ## Output layout
 
 ```
 results/
   {sample}/
     00_merged/ 01_filtered/ 02_trimmed/   fastq at each stage
-    03_cluster/        dominant-cluster reads + purity.tsv (purity check on)
+    03_cluster/        dominant-cluster reads + purity.tsv (purity check on),
+                       and {sample}.secondary.fastq.gz when there is a second sequence
     04_consensus/      {sample}.consensus.fasta  (the result)
     05_qc/             qc.tsv + coverage.tsv (binned depth along the consensus)
                        {sample}.alignments.sam.gz (the reads mapped to the consensus, for a viewer;
                        unsorted, qualities blanked, unmapped reads dropped)
+  {sample}.secondary/   only when a sample has a second sequence: 04_consensus/ and 05_qc/
+                        as above, for the second consensus
   final_report/
     consensus_summary.tsv   one row per sample: status, reasons, reads, depth, identity
     all_consensus.fasta     every sample's consensus; status in the header
+    secondary_consensus.tsv / .fasta   the second consensuses, if any: the sample, its
+                            share of the reads, and the same QC numbers and status
     run_qc_summary.html     the summary table
     read_qc_summary.html, read_stats.tsv, read_length_qscore_hist.tsv
   pipeline_info/
@@ -124,5 +147,6 @@ nextflow run main.nf -profile test,docker
 ```
 
 Four synthetic samples, one per outcome: clean, clean, 75/25 mix (WARN, consensus
-is the majority sequence), and too few reads (FAIL). Medaka is off in this profile.
+is the majority sequence, and the minority gets a second consensus), and too few
+reads (FAIL). Medaka is off in this profile.
 

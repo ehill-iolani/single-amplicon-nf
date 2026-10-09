@@ -13,6 +13,9 @@ process BUILD_REPORT {
     path "consensus_summary.tsv", emit: summary
     path "all_consensus.fasta"
     path "run_qc_summary.html"
+    // only when a sample got a second consensus
+    path "secondary_consensus.tsv", optional: true
+    path "secondary_consensus.fasta", optional: true
 
     script:
     // purity_files, qc_files and consensus_fastas can each be empty (check off /
@@ -27,6 +30,7 @@ process BUILD_REPORT {
         --consensus ${consensus_fastas} \\
         --min-reads ${params.min_reads} \\
         --min-dominant-frac ${params.min_dominant_frac} \\
+        --secondary-suffix ${params.secondary_suffix} \\
         --out-summary consensus_summary.tsv \\
         --out-fasta all_consensus.fasta \\
         --out-html run_qc_summary.html

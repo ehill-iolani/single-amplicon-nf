@@ -33,6 +33,7 @@ def helpMessage() {
       --min_reads          samples with fewer reads are reported as FAIL, not assembled (default ${params.min_reads})
       --enable_purity_check  build the consensus from the dominant read cluster only (default ${params.enable_purity_check})
       --cluster_id         vsearch identity for the purity check (default ${params.cluster_id})
+      --enable_secondary_consensus  also build a consensus from the second-largest read cluster (default ${params.enable_secondary_consensus}), if it holds at least --min_secondary_frac of the reads (default ${params.min_secondary_frac})
       --enable_medaka      medaka polish (default ${params.enable_medaka}); --medaka_model must match your basecaller (default ${params.medaka_model})
       --min_depth / --min_primary_frac / --min_dominant_frac   QC thresholds (default ${params.min_depth} / ${params.min_primary_frac} / ${params.min_dominant_frac})
     """.stripIndent()
@@ -44,6 +45,9 @@ def samplesheetToChannel(path) {
         .splitCsv(header: true)
         .map { row ->
             // checkIfExists doesn't catch a glob matching zero files, so check explicitly
+            if (row.sample.endsWith(params.secondary_suffix)) {
+                error "Samplesheet row '${row.sample}': sample names can't end in '${params.secondary_suffix}', which the pipeline uses for a sample's second consensus"
+            }
             def fq = file(row.fastq, checkIfExists: true)
             def files = fq instanceof List ? fq : [fq]
             if (files.isEmpty()) {
