@@ -97,6 +97,8 @@ results/
     03_cluster/        dominant-cluster reads + purity.tsv (purity check on)
     04_consensus/      {sample}.consensus.fasta  (the result)
     05_qc/             qc.tsv + coverage.tsv (binned depth along the consensus)
+                       {sample}.alignments.sam.gz (the reads mapped to the consensus, for a viewer;
+                       unsorted, qualities blanked, unmapped reads dropped)
   final_report/
     consensus_summary.tsv   one row per sample: status, reasons, reads, depth, identity
     all_consensus.fasta     every sample's consensus; status in the header
