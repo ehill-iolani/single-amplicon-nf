@@ -8,7 +8,10 @@ process MEDAKA {
     publishDir(path: { "${params.outdir}/${sample}/04_consensus" }, mode: 'copy')
 
     input:
-    tuple val(sample), path(reads), path(racon_fasta)
+    // staged under another name: racon's file is also called <sample>.consensus.fasta,
+    // so with that name the redirect below would write through the staged link
+    // into racon's work directory, and the file published here would be a link
+    tuple val(sample), path(reads), path(racon_fasta, stageAs: 'racon.fasta')
 
     output:
     tuple val(sample), path("${sample}.consensus.fasta"), emit: consensus
