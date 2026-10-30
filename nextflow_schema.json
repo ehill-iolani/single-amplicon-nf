@@ -194,12 +194,14 @@
           "type": "string",
           "default": "quay.io",
           "description": "Registry for the biocontainers images.",
+          "hidden": true,
           "help_text": "The google_batch profile points this at the project's own Artifact Registry mirror (see scripts/mirror_images.sh); pass --container_registry quay.io to pull from upstream instead. The mirror keeps each image's upstream path, so only the host changes."
         },
         "dockerhub_registry": {
           "type": "string",
           "default": "docker.io",
           "description": "Registry for the Docker Hub images (medaka, and ubuntu on Batch).",
+          "hidden": true,
           "help_text": "Same idea as container_registry, for images that come from Docker Hub."
         }
       }
