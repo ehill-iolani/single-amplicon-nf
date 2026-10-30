@@ -77,6 +77,9 @@ flowchart TD
 A sample with fewer than `--min_reads` reads gets no consensus but is still
 listed (FAIL, `too_few_reads`); it does not stop the others.
 
+A damaged `.fastq.gz` part stops the run at `MERGE_FASTQ` with the sample
+and file named, rather than silently losing every read after it.
+
 ### Why the purity check, and why 0.70
 
 wf-amplicon does not cluster: it assumes one amplicon per barcode and checks the
