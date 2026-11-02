@@ -78,7 +78,8 @@ A sample with fewer than `--min_reads` reads gets no consensus but is still
 listed (FAIL, `too_few_reads`); it does not stop the others.
 
 A damaged `.fastq.gz` part stops the run at `MERGE_FASTQ` with the sample
-and file named, rather than silently losing every read after it.
+and file named, rather than silently losing every read after it. Plain
+`.fastq` parts work too (they're gzipped as they're merged).
 
 ### Why the purity check, and why 0.70
 
