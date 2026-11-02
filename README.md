@@ -29,6 +29,9 @@ sample_a,data/barcode17/*.fastq.gz
 sample_b,data/barcode18/*.fastq.gz
 ```
 
+Each row needs its own `sample` name (compared ignoring case): two rows with
+the same name stop the run at launch.
+
 Set `--min_len` / `--max_len` for your amplicon; look at the read-length
 distribution first with `-entry READ_QC_ONLY`. Add `--fwd_primer` / `--rev_primer`
 to trim primers (reads are flipped to one orientation).
