@@ -61,8 +61,12 @@ flowchart TD
 
     reads_in --> SPOA_CONSENSUS --> MINIMAP2_ALIGN --> RACON
     RACON --> medaka_check{"--enable_medaka?"}
-    medaka_check -->|"true (default)"| MEDAKA --> consensus["consensus fasta"]
-    medaka_check -->|"false"| consensus
+    medaka_check -->|"true (default)"| MEDAKA --> polished["polished consensus"]
+    medaka_check -->|"false"| polished
+
+    polished --> trim_check{"--enable_end_trim?"}
+    trim_check -->|"true (default)"| MAP_TO_CONSENSUS["MAP_TO_CONSENSUS\n(its own reads -> consensus)"] --> END_TRIM["END_TRIM\n(cut ends to depth >= 0.2 x median)"] --> consensus["consensus fasta"]
+    trim_check -->|"false"| consensus
 
     consensus --> MAPBACK
     DOWNSAMPLE -->|"all usable reads"| MAPBACK
@@ -113,6 +117,23 @@ supported, and its depth, identity and status are its own. `--enable_secondary_c
 turns this off. Needs the purity check; closely related variants fall in one cluster
 and are not separated.
 
+### Why the end trim
+
+spoa's consensus can run out past the amplicon on the extra sequence a few reads
+carry: chimeric reads that kept ONT adapter and native-barcode flank through
+cutadapt. racon and medaka polish that tail but don't remove it. On Nishii et al.
+2026 (PRJEB85706, 88 plant barcodes) 45 consensus sequences carried more than
+20 bp of it (median 33, up to 263) from about 1% of the reads, and it caused nearly
+every `uneven_coverage` WARN. END_TRIM maps the consensus's own reads back to it
+and cuts each end in to the first position whose depth reaches `--end_trim_frac`
+(0.2) of the median depth; the middle is never cut. Real ends sit on a plateau of
+nearly every read and the tails at ~1%, so the cut is the same anywhere from 0.1
+to 0.5. On that dataset it made 77 of 82 sequences identical to the authors' own
+consensus (75 before) and left no mismatches, without losing any of their bases.
+`04_consensus/{sample}.end_trim.tsv` lists what came off each end, and
+`trimmed_start` / `trimmed_end` are in `qc.tsv` and the summary.
+`--enable_end_trim false` delivers the polished consensus as it is.
+
 ## Output layout
 
 ```
@@ -122,13 +143,15 @@ results/
     03_cluster/        dominant-cluster reads + purity.tsv (purity check on),
                        and {sample}.secondary.fastq.gz when there is a second sequence
     04_consensus/      {sample}.consensus.fasta  (the result)
+                       {sample}.end_trim.tsv (end trim on: bases cut off each end, and which)
     05_qc/             qc.tsv + coverage.tsv (binned depth along the consensus)
                        {sample}.alignments.sam.gz (the reads mapped to the consensus, for a viewer;
                        unsorted, qualities blanked, unmapped reads dropped)
   {sample}.secondary/   only when a sample has a second sequence: 04_consensus/ and 05_qc/
                         as above, for the second consensus
   final_report/
-    consensus_summary.tsv   one row per sample: status, reasons, reads, depth, identity
+    consensus_summary.tsv   one row per sample: status, reasons, reads, depth, identity,
+                            bases the end trim cut off each end
     all_consensus.fasta     every sample's consensus; status in the header
     secondary_consensus.tsv / .fasta   the second consensuses, if any: the sample, its
                             share of the reads, and the same QC numbers and status

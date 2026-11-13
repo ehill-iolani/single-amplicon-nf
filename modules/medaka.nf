@@ -5,7 +5,9 @@ process MEDAKA {
     // which knows the v5.0.0 models (the v1.11.3 tag does not). Not biocontainers:
     // that build is amd64-only and SIGILLs under Docker emulation on Apple Silicon.
     container "${params.dockerhub_registry}/ontresearch/medaka:shaf39439188c323053e66cf79618fae1ab33d1b38a"
-    publishDir(path: { "${params.outdir}/${sample}/04_consensus" }, mode: 'copy')
+    // published only with the end trim off; otherwise END_TRIM publishes the
+    // trimmed consensus under the same name
+    publishDir(path: { "${params.outdir}/${sample}/04_consensus" }, mode: 'copy', enabled: !params.enable_end_trim)
 
     input:
     // staged under another name: racon's file is also called <sample>.consensus.fasta,

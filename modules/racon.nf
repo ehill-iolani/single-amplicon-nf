@@ -3,8 +3,9 @@ process RACON {
     label 'process_medium'
     container "${params.container_registry}/biocontainers/racon:1.5.0--h21ec9f0_2"
     // only the final consensus is published (to 04_consensus/); with medaka on,
-    // MEDAKA publishes the same filename there instead
-    publishDir(path: { "${params.outdir}/${sample}/04_consensus" }, mode: 'copy', enabled: !params.enable_medaka)
+    // MEDAKA publishes the same filename there instead, and with the end trim
+    // on, END_TRIM does
+    publishDir(path: { "${params.outdir}/${sample}/04_consensus" }, mode: 'copy', enabled: !params.enable_medaka && !params.enable_end_trim)
 
     input:
     tuple val(sample), path(reads), path(draft), path(sam)

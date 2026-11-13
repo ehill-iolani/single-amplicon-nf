@@ -8,6 +8,8 @@ include { SPOA_CONSENSUS    } from '../modules/spoa_consensus.nf'
 include { MINIMAP2_ALIGN    } from '../modules/minimap2_align.nf'
 include { RACON             } from '../modules/racon.nf'
 include { MEDAKA            } from '../modules/medaka.nf'
+include { MINIMAP2_ALIGN as MAP_TO_CONSENSUS } from '../modules/minimap2_align.nf'
+include { END_TRIM          } from '../modules/end_trim.nf'
 include { MAPBACK           } from '../modules/mapback.nf'
 include { CONSENSUS_QC      } from '../modules/consensus_qc.nf'
 include { BUILD_REPORT      } from '../modules/report.nf'
@@ -73,20 +75,34 @@ workflow SINGLE_AMPLICON {
 
     if (params.enable_medaka) {
         MEDAKA(all_consensus_reads.join(RACON.out.polished))
-        consensus_ch = MEDAKA.out.consensus
+        polished_ch = MEDAKA.out.consensus
     } else {
-        consensus_ch = RACON.out.polished
+        polished_ch = RACON.out.polished
     }
 
-    // 6. QC: map ALL of the sample's usable reads (not just the dominant
+    // 6. end trim: spoa can run the consensus out past the amplicon on a few
+    //    reads' extra sequence (adapter / barcode flank on chimeric reads), and
+    //    polishing keeps it. Map the consensus's own reads back to it and cut
+    //    each end in to where depth reaches --end_trim_frac of the median
+    if (params.enable_end_trim) {
+        MAP_TO_CONSENSUS(all_consensus_reads.join(polished_ch))
+        END_TRIM(MAP_TO_CONSENSUS.out.aligned.map { sample, reads, consensus, sam -> tuple(sample, consensus, sam) })
+        consensus_ch = END_TRIM.out.consensus
+        trim_ch      = END_TRIM.out.trim
+    } else {
+        consensus_ch = polished_ch
+        trim_ch      = polished_ch.map { sample, fasta -> tuple(sample, []) }
+    }
+
+    // 7. QC: map ALL of the sample's usable reads (not just the dominant
     //    cluster) back to the consensus -- reads that don't map are the
     //    contamination/off-target signal, independent of the clustering. A second
     //    consensus is checked against its own cluster's reads instead: the rest
     //    of the sample is, by definition, not it
     MAPBACK(consensus_ch.join(usable_ch.mix(secondary_reads)))
-    CONSENSUS_QC(MAPBACK.out.paf)
+    CONSENSUS_QC(MAPBACK.out.paf.join(trim_ch))
 
-    // 7. one summary row per sample (including samples that got no consensus),
+    // 8. one summary row per sample (including samples that got no consensus),
     //    a combined FASTA, and the QC html
     BUILD_REPORT(
         DOWNSAMPLE.out.counts.map { sample, tsv -> tsv }.collect(),

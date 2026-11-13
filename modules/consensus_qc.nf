@@ -7,7 +7,8 @@ process CONSENSUS_QC {
     publishDir(path: { "${params.outdir}/${sample}/05_qc" }, mode: 'copy')
 
     input:
-    tuple val(sample), path(consensus), path(paf), val(n_reads)
+    // trim = END_TRIM's end_trim.tsv, or [] with the end trim off
+    tuple val(sample), path(consensus), path(paf), val(n_reads), path(trim)
 
     output:
     tuple val(sample), path("${sample}.qc.tsv"), emit: qc
@@ -22,6 +23,7 @@ process CONSENSUS_QC {
         --n-reads ${n_reads} \\
         --min-depth ${params.min_depth} \\
         --min-primary-frac ${params.min_primary_frac} \\
+        ${trim ? "--trim ${trim}" : ''} \\
         --out-prefix ${sample}
     """
 }

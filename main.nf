@@ -35,6 +35,7 @@ def helpMessage() {
       --cluster_id         vsearch identity for the purity check (default ${params.cluster_id})
       --enable_secondary_consensus  also build a consensus from the second-largest read cluster (default ${params.enable_secondary_consensus}), if it holds at least --min_secondary_frac of the reads (default ${params.min_secondary_frac})
       --enable_medaka      medaka polish (default ${params.enable_medaka}); --medaka_model must match your basecaller (default ${params.medaka_model})
+      --enable_end_trim    cut the consensus ends back to where depth reaches --end_trim_frac x the median (default ${params.enable_end_trim} / ${params.end_trim_frac})
       --min_depth / --min_primary_frac / --min_dominant_frac   QC thresholds (default ${params.min_depth} / ${params.min_primary_frac} / ${params.min_dominant_frac})
     """.stripIndent()
 }

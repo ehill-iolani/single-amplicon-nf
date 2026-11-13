@@ -152,6 +152,20 @@
           "default": "r1041_e82_400bps_hac_v5.0.0",
           "description": "Medaka model.",
           "help_text": "Must match the pore, chemistry and basecaller model that produced the reads, or the polish can make the consensus worse."
+        },
+        "enable_end_trim": {
+          "type": "boolean",
+          "default": true,
+          "description": "Trim the consensus ends back to where the reads cover them.",
+          "help_text": "A few chimeric reads can carry adapter or barcode sequence past the amplicon, and the consensus can follow them out. With this on, the consensus's own reads are mapped back to it and each end is cut in to the first position covered by at least --end_trim_frac of the median depth. What was cut is listed in 04_consensus/<sample>.end_trim.tsv."
+        },
+        "end_trim_frac": {
+          "type": "number",
+          "default": 0.2,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Share of the median read depth an end base needs to be kept.",
+          "help_text": "Real amplicon ends are covered by nearly every read; the tails this removes are covered by about 1% of them. Kept low because the last few real bases dip a little below the median. Only used with --enable_end_trim."
         }
       }
     },

@@ -66,7 +66,7 @@ def main():
     cols = [
         "sample", "status", "reasons", "reads_after_trim", "reads_used",
         "dominant_fraction", "n_clusters", "consensus_length", "n_ambiguous",
-        "mean_depth", "mapped_fraction", "median_identity",
+        "mean_depth", "mapped_fraction", "median_identity", "trimmed_start", "trimmed_end",
     ]
 
     summary = []
@@ -97,6 +97,9 @@ def main():
             "mean_depth": q["mean_depth"] if q else "NA",
             "mapped_fraction": q["mapped_fraction"] if q else "NA",
             "median_identity": q["median_identity"] if q else "NA",
+            # bases the end trim cut off each end (NA: trim off, or no consensus)
+            "trimmed_start": q.get("trimmed_start", "NA") if q else "NA",
+            "trimmed_end": q.get("trimmed_end", "NA") if q else "NA",
         }
         summary.append(row)
 
@@ -115,6 +118,7 @@ def main():
     secondary_cols = [
         "sample", "sequence_id", "status", "reasons", "share_of_reads", "reads_used",
         "consensus_length", "n_ambiguous", "mean_depth", "mapped_fraction", "median_identity",
+        "trimmed_start", "trimmed_end",
     ]
     secondary = []
     for sample in sorted(counts):
@@ -135,6 +139,8 @@ def main():
             "mean_depth": q["mean_depth"],
             "mapped_fraction": q["mapped_fraction"],
             "median_identity": q["median_identity"],
+            "trimmed_start": q.get("trimmed_start", "NA"),
+            "trimmed_end": q.get("trimmed_end", "NA"),
         })
     if secondary:
         with open("secondary_consensus.tsv", "w", newline="") as out:

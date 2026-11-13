@@ -12,8 +12,12 @@ Status:
   WARN  part of the consensus is covered below --min-depth, or the consensus
         contains ambiguous bases
   PASS  otherwise
+
+--trim (END_TRIM's end_trim.tsv) adds how many bases the end trim took off
+each end (trimmed_start / trimmed_end); NA when the trim was off.
 """
 import argparse
+import csv
 import statistics
 
 COVERAGE_BINS = 200
@@ -73,8 +77,15 @@ def main():
     ap.add_argument("--n-reads", type=int, required=True, help="reads that were mapped (denominator for mapped_fraction)")
     ap.add_argument("--min-depth", type=float, default=30)
     ap.add_argument("--min-primary-frac", type=float, default=0.7)
+    ap.add_argument("--trim", help="end_trim.tsv from END_TRIM, when the end trim ran")
     ap.add_argument("--out-prefix", required=True)
     args = ap.parse_args()
+
+    trimmed_start = trimmed_end = "NA"
+    if args.trim:
+        with open(args.trim) as fh:
+            t = next(csv.DictReader(fh, delimiter="\t"))
+        trimmed_start, trimmed_end = t["trimmed_start"], t["trimmed_end"]
 
     seq = read_fasta_seq(args.consensus).upper()
     length = len(seq)
@@ -116,12 +127,12 @@ def main():
     cols = [
         "sample", "consensus_length", "n_ambiguous", "reads_mapped", "mapped_fraction",
         "reads_split", "mean_depth", "min_depth", "breadth_at_min_depth",
-        "median_identity", "qc_status", "qc_reasons",
+        "median_identity", "qc_status", "qc_reasons", "trimmed_start", "trimmed_end",
     ]
     row = [
         args.sample, length, n_ambiguous, reads_mapped, f"{mapped_fraction:.4f}",
         reads_split, f"{mean_depth:.1f}", min_depth_seen, f"{breadth:.4f}",
-        f"{median_identity:.4f}", status, ";".join(reasons),
+        f"{median_identity:.4f}", status, ";".join(reasons), trimmed_start, trimmed_end,
     ]
     with open(f"{args.out_prefix}.qc.tsv", "w") as out:
         out.write("\t".join(cols) + "\n")
